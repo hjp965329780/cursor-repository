@@ -1,29 +1,48 @@
 {
-  "name": "@text-translator/chrome-extension",
-  "version": "1.0.0",
-  "description": "Chrome extension for text translation",
+  "name": "chrome-extension",
+  "private": true,
+  "version": "0.12.4",
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rimraf dist",
-    "lint": "eslint . --ext .vue,.js,.ts,.jsx,.tsx --fix",
-    "type-check": "vue-tsc --noEmit"
+    "build": "rsbuild build && npm run pack-extension",
+    "dev": "rsbuild dev --open",
+    "preview": "rsbuild preview",
+    "pack-extension": "node scripts/pack-extension.js"
   },
   "dependencies": {
-    "vue": "^3.3.8",
-    "pinia": "^2.1.7",
-    "vue-router": "^4.2.5",
-    "axios": "^1.6.2"
+    "@ant-design/icons": "^5.3.1",
+    "@midscene/core": "0.27.1",
+    "@midscene/recorder": "0.27.1",
+    "@midscene/shared": "0.27.1",
+    "@midscene/visualizer": "0.27.1",
+    "@midscene/web": "0.27.1",
+    "@types/file-saver": "2.0.7",
+    "antd": "^5.21.6",
+    "canvas-confetti": "1.9.3",
+    "dayjs": "^1.11.11",
+    "file-saver": "2.0.5",
+    "highlight.js": "11.11.1",
+    "jszip": "3.10.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-highlight": "0.15.0",
+    "zustand": "4.5.2"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.254",
-    "@vitejs/plugin-vue": "^4.5.0",
-    "@vue/tsconfig": "^0.4.0",
-    "rimraf": "^5.0.5",
-    "typescript": "^5.3.0",
-    "vite": "^5.0.0",
-    "vue-tsc": "^1.8.22"
+    "@rsbuild/core": "^1.3.22",
+    "@rsbuild/plugin-less": "^1.2.4",
+    "@rsbuild/plugin-node-polyfill": "1.3.0",
+    "@rsbuild/plugin-react": "^1.3.1",
+    "@rsbuild/plugin-svgr": "^1.1.1",
+    "@rsbuild/plugin-type-check": "1.2.3",
+    "@tailwindcss/postcss": "4.1.11",
+    "@types/chrome": "0.0.279",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "archiver": "^6.0.0",
+    "less": "^4.2.0",
+    "tailwindcss": "4.1.11",
+    "typescript": "^5.8.3",
+    "openai": "4.81.0"
   }
 }

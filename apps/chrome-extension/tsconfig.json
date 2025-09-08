@@ -1,31 +1,41 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue",
-    "src/**/*.d.ts"
-  ],
-  "exclude": ["node_modules", "dist"],
   "compilerOptions": {
-    "composite": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "types": ["chrome"],
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["DOM", "ES2020"],
+    "jsx": "react-jsx",
     "target": "ES2020",
+    "skipLibCheck": true,
+    "useDefineForClassFields": true,
+
+    /* modules */
     "module": "ESNext",
+    "isolatedModules": true,
+    "resolveJsonModule": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "noEmit": true,
-    "jsx": "preserve",
+
+    /* type checking */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
-  }
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "composite": true
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/recorder"
+    },
+    {
+      "path": "../../packages/shared"
+    },
+    {
+      "path": "../../packages/visualizer"
+    },
+    {
+      "path": "../../packages/web-integration"
+    }
+  ]
 }
