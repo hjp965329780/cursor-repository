@@ -9,6 +9,7 @@
 <script>
 import { BaseButton } from '@repo/ui-components'
 import { greet } from '@repo/utils'
+import { vueModel } from '@hjp/vue-model'
 
 export default {
   name: 'App',
@@ -17,6 +18,7 @@ export default {
     return { message: '' }
   },
   mounted() {
+    console.log(vueModel)
     this.message = greet('Monorepo')
   },
   methods: {

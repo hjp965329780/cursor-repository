@@ -1,0 +1,1 @@
+export { default as vueModel } from './src/vue-model';
