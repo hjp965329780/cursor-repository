@@ -1,0 +1,10 @@
+{
+  "name": "@repo/ui-components",
+  "version": "0.0.0",
+  "private": false,
+  "main": "src/index.js",
+  "peerDependencies": {
+    "vue": ">=2.6.14 <3"
+  },
+  "license": "MIT"
+}
