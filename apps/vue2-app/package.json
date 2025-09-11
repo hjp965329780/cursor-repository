@@ -12,7 +12,8 @@
     "@repo/utils": "workspace:*",
     "@hjp/vue-model": "workspace:*",
     "core-js": "^3.37.1",
-    "vue": "2.7.16"
+    "vue": "2.7.16",
+    "element-ui": "^2.15.14"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~4.5.19",
