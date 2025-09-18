@@ -1,61 +1,17 @@
 <template>
   <div id="app">
-    <h1>Vue2 App with Monorepo Packages</h1>
-    <BaseButton @click="onClick">点我</BaseButton>
-    <p>{{ message }}</p>
-    
-    <div style="margin-top: 20px;">
-      <h3>多选组件示例</h3>
-      <MultiSelect 
-        v-model="selectedItems" 
-        :options="selectOptions"
-        placeholder="请选择多个选项"
-        @change="onSelectChange"
-      />
-      <p style="margin-top: 10px;">
-        已选择: {{ selectedItems.join(', ') || '无' }}
-      </p>
-    </div>
+    <nav style="background: #f5f5f5; padding: 10px 20px; margin-bottom: 20px;">
+      <router-link to="/home" style="margin-right: 20px; text-decoration: none; color: #2c3e50;">
+        首页
+      </router-link>
+    </nav>
+    <router-view />
   </div>
 </template>
 
 <script>
-import { BaseButton } from '@repo/ui-components'
-import { greet } from '@repo/utils'
-import { vueModel } from '@hjp/vue-model'
-import MultiSelect from './components/MultiSelect.vue'
-
 export default {
-  name: 'App',
-  components: { 
-    BaseButton,
-    MultiSelect
-  },
-  data() {
-    return { 
-      message: '',
-      selectedItems: [],
-      selectOptions: [
-        { value: 'option1', label: '选项一' },
-        { value: 'option2', label: '选项二' },
-        { value: 'option3', label: '选项三' },
-        { value: 'option4', label: '选项四' },
-        { value: 'option5', label: '选项五' }
-      ]
-    }
-  },
-  mounted() {
-    console.log(vueModel)
-    this.message = greet('Monorepo')
-  },
-  methods: {
-    onClick() { 
-      this.message = greet('Clicked') 
-    },
-    onSelectChange(value) {
-      console.log('选择发生变化:', value)
-    }
-  }
+  name: 'App'
 }
 </script>
 
