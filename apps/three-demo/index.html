@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 手势交互粒子系统</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
+        
+        /* UI 面板 */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 280px;
+            padding: 20px;
+            background: rgba(20, 20, 30, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            z-index: 100;
+            pointer-events: auto;
+            user-select: none;
+            transition: opacity 0.3s;
+        }
+
+        h2 { margin: 0 0 15px 0; font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+        
+        .control-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-size: 12px; opacity: 0.8; }
+        
+        /* 样式化选择器和按钮 */
+        select, input[type="color"] {
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            outline: none;
+        }
+        
+        option { background: #1a1a1a; }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            background: linear-gradient(45deg, #ff0055, #ff5500);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.98); }
+
+        /* 摄像头预览 (调试用，设为小窗或隐藏) */
+        #video-preview {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 10px;
+            transform: scaleX(-1); /* 镜像 */
+            opacity: 0.5;
+            z-index: 90;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(255,0,85,0.8);
+        }
+
+        /* 状态指示灯 */
+        .status {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #ff3333;
+            margin-right: 8px;
+        }
+        .status.active { background: #33ff33; box-shadow: 0 0 8px #33ff33; }
+    </style>
+    
+    <!-- 引入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- 引入 MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="loading">正在初始化视觉引擎...</div>
+
+    <div id="ui-container">
+        <h2>✨ 粒子控制器</h2>
+        
+        <div class="control-group">
+            <div style="display:flex; align-items:center; margin-bottom:10px;">
+                <span id="cam-status" class="status"></span>
+                <span style="font-size:12px;">手势追踪状态</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>选择模型形状</label>
+            <select id="shape-select">
+                <option value="heart">💖 爱心 (Heart)</option>
+                <option value="flower">🌸 曼陀罗花 (Flower)</option>
+                <option value="saturn">🪐 土星 (Saturn)</option>
+                <option value="buddha">🧘 禅意 (Meditate)</option>
+                <option value="fireworks">🎆 烟花 (Fireworks)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>粒子颜色</label>
+            <input type="color" id="color-picker" value="#ff0055">
+        </div>
+
+        <button id="fullscreen-btn">⛶ 全屏模式</button>
+        
+        <div style="margin-top:15px; font-size:11px; color:#aaa; line-height:1.4;">
+            使用说明:<br>
+            1. 允许摄像头权限<br>
+            2. 举起单手或双手<br>
+            3. <b>张开手掌</b> = 粒子扩散/放大<br>
+            4. <b>握拳/捏合</b> = 粒子聚拢/缩小
+        </div>
+    </div>
+
+    <video id="video-preview" playsinline></video>
+
+    <script>
+        // ================= 配置参数 =================
+        const PARTICLE_COUNT = 15000;
+        const PARTICLE_SIZE = 0.05;
+        let currentShape = 'heart';
+        let targetColor = new THREE.Color(0xff0055);
+        
+        // 交互变量
+        let handScale = 1.0;     // 手势控制的缩放
+        let handSpread = 0.0;    // 手势控制的扩散
+        let isHandDetected = false;
+
+        // ================= Three.js 初始化 =================
+        const scene = new THREE.Scene();
+        // 添加一点雾效增加深邃感
+        scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // ================= 粒子系统核心 =================
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const targetPositions = new Float32Array(PARTICLE_COUNT * 3); // 目标形状的坐标
+        
+        // 初始化所有点在原点
+        for(let i = 0; i < PARTICLE_COUNT * 3; i++) {
+            positions[i] = (Math.random() - 0.5) * 10;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const material = new THREE.PointsMaterial({
+            color: targetColor,
+            size: PARTICLE_SIZE,
+            sizeAttenuation: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.8
+        });
+
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // ================= 形状生成算法 =================
+        function getShapeData(shapeName) {
+            const arr = [];
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                let x, y, z;
+                
+                switch (shapeName) {
+                    case 'heart':
+                        // 3D爱心公式
+                        const t = Math.random() * Math.PI * 2;
+                        const p = Math.random() * Math.PI * 2;
+                        // 这是一个比较常见的参数化爱心
+                        x = 16 * Math.pow(Math.sin(t), 3);
+                        y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                        z = (Math.random()-0.5) * 4; // 给一点厚度
+                        // 归一化缩放
+                        x *= 0.1; y *= 0.1;
+                        break;
+
+                    case 'flower':
+                        // 黄金角螺旋 (Phyllotaxis)
+                        const angle = i * 137.5 * (Math.PI / 180);
+                        const r = 0.04 * Math.sqrt(i);
+                        x = r * Math.cos(angle);
+                        y = r * Math.sin(angle);
+                        z = (Math.random() - 0.5) * (2 - r/2); // 中心厚，边缘薄
+                        break;
+
+                    case 'saturn':
+                        // 70% 粒子组成球体，30% 组成光环
+                        if (Math.random() > 0.3) {
+                            // 球体
+                            const theta = Math.random() * Math.PI * 2;
+                            const phi = Math.acos((Math.random() * 2) - 1);
+                            const rad = 1.2;
+                            x = rad * Math.sin(phi) * Math.cos(theta);
+                            y = rad * Math.sin(phi) * Math.sin(theta);
+                            z = rad * Math.cos(phi);
+                        } else {
+                            // 光环
+                            const ang = Math.random() * Math.PI * 2;
+                            const radRing = 1.8 + Math.random() * 1.5;
+                            x = radRing * Math.cos(ang);
+                            z = radRing * Math.sin(ang);
+                            y = (Math.random() - 0.5) * 0.1; // 非常薄
+                        }
+                        // 稍微倾斜
+                        const tx = x, ty = y, tz = z;
+                        x = tx * Math.cos(0.4) - ty * Math.sin(0.4);
+                        y = tx * Math.sin(0.4) + ty * Math.cos(0.4);
+                        break;
+
+                    case 'buddha':
+                        // 用简单的几何体模拟打坐的形状 (球体堆叠)
+                        const seed = Math.random();
+                        if (seed < 0.4) {
+                            // 身体 (大椭球)
+                            const theta = Math.random() * Math.PI * 2;
+                            const phi = Math.acos((Math.random() * 2) - 1);
+                            x = 1.2 * Math.sin(phi) * Math.cos(theta);
+                            y = 1.0 * Math.sin(phi) * Math.sin(theta) - 0.5;
+                            z = 1.0 * Math.cos(phi);
+                        } else if (seed < 0.6) {
+                            // 头 (小球)
+                            const theta = Math.random() * Math.PI * 2;
+                            const phi = Math.acos((Math.random() * 2) - 1);
+                            x = 0.5 * Math.sin(phi) * Math.cos(theta);
+                            y = 0.5 * Math.sin(phi) * Math.sin(theta) + 1.0;
+                            z = 0.5 * Math.cos(phi);
+                        } else {
+                            // 腿部盘坐 (圆环切片)
+                            const ang = Math.random() * Math.PI * 2;
+                            const radL = 1.2 + Math.random() * 0.5;
+                            x = radL * Math.cos(ang);
+                            z = radL * Math.sin(ang);
+                            y = -1.2 + (Math.random() * 0.4);
+                        }
+                        break;
+                        
+                    case 'fireworks':
+                        // 随机爆炸球体
+                        const ft = Math.random() * Math.PI * 2;
+                        const fp = Math.acos((Math.random() * 2) - 1);
+                        const fr = Math.random() * 3.5; // 大半径
+                        x = fr * Math.sin(fp) * Math.cos(ft);
+                        y = fr * Math.sin(fp) * Math.sin(ft);
+                        z = fr * Math.cos(fp);
+                        break;
+                }
+                arr.push(x, y, z);
+            }
+            return arr;
+        }
+
+        function updateTargetShape(shape) {
+            const data = getShapeData(shape);
+            for(let i = 0; i < data.length; i++) {
+                targetPositions[i] = data[i];
+            }
+        }
+
+        // 初始化默认形状
+        updateTargetShape(currentShape);
+
+        // ================= MediaPipe Hands 集成 =================
+        const videoElement = document.getElementById('video-preview');
+        
+        function onResults(results) {
+            document.getElementById('loading').style.display = 'none';
+            
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                isHandDetected = true;
+                document.getElementById('cam-status').classList.add('active');
+                
+                // 获取第一只手的数据
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // 计算逻辑：
+                // 1. 缩放控制：计算 0号点(手腕) 和 9号点(中指根部) 的距离作为基准，
+                //    或者计算 4号点(拇指) 和 8号点(食指) 的距离 (Pinch)。
+                //    这里我们用手掌张开程度：计算 0(手腕) 到 12(中指指尖) 的距离。
+                
+                const wrist = landmarks[0];
+                const middleTip = landmarks[12];
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+
+                // 计算手掌展开距离 (0 -> 12)
+                const palmOpenDist = Math.sqrt(
+                    Math.pow(wrist.x - middleTip.x, 2) + 
+                    Math.pow(wrist.y - middleTip.y, 2)
+                );
+
+                // 计算捏合距离 (4 -> 8)
+                const pinchDist = Math.sqrt(
+                    Math.pow(thumbTip.x - indexTip.x, 2) + 
+                    Math.pow(thumbTip.y - indexTip.y, 2)
+                );
+                
+                // 映射数值 (这些系数需要根据摄像头实际体验微调)
+                // palmOpenDist 通常在 0.2 (握拳) 到 0.5 (张开) 之间
+                
+                // 目标缩放：手张开越大，模型越大
+                let targetScale = 1.0 + (palmOpenDist - 0.3) * 3; 
+                targetScale = Math.max(0.2, Math.min(targetScale, 3.0)); // 限制范围
+
+                // 目标扩散：捏合时粒子聚拢，张开时粒子松散
+                // pinchDist 小于 0.05 视为捏合
+                let targetSpread = (pinchDist < 0.1) ? 0.0 : (pinchDist * 2.0);
+                
+                // 平滑插值，避免抖动
+                handScale += (targetScale - handScale) * 0.1;
+                handSpread += (targetSpread - handSpread) * 0.1;
+
+            } else {
+                isHandDetected = false;
+                document.getElementById('cam-status').classList.remove('active');
+                // 无手势时缓慢恢复默认
+                handScale += (1.0 - handScale) * 0.05;
+                handSpread += (0.0 - handSpread) * 0.05;
+            }
+        }
+
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 320,
+            height: 240
+        });
+        
+        // 启动摄像头
+        cameraUtils.start().catch(err => {
+            console.error("摄像头启动失败:", err);
+            document.getElementById('loading').innerText = "摄像头访问被拒绝或出错";
+        });
+
+        // ================= 事件监听 =================
+        
+        // 形状切换
+        document.getElementById('shape-select').addEventListener('change', (e) => {
+            currentShape = e.target.value;
+            updateTargetShape(currentShape);
+        });
+
+        // 颜色切换
+        document.getElementById('color-picker').addEventListener('input', (e) => {
+            targetColor.set(e.target.value);
+        });
+
+        // 全屏
+        document.getElementById('fullscreen-btn').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+
+        // 窗口大小调整
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ================= 动画循环 =================
+        
+        // 鼠标交互备选 (如果没有摄像头)
+        let mouseX = 0;
+        let mouseY = 0;
+        document.addEventListener('mousemove', (e) => {
+            mouseX = (e.clientX - window.innerWidth / 2) * 0.001;
+            mouseY = (e.clientY - window.innerHeight / 2) * 0.001;
+        });
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // 1. 粒子颜色平滑过渡
+            material.color.lerp(targetColor, 0.05);
+
+            // 2. 粒子位置更新 (Morphing)
+            const positionsArray = geometry.attributes.position.array;
+            
+            // 旋转整个粒子群
+            particles.rotation.y += 0.002;
+            particles.rotation.x += (mouseY - particles.rotation.x) * 0.05;
+            particles.rotation.z += (mouseX - particles.rotation.z) * 0.05;
+
+            // 根据手势调整缩放
+            // 平滑缩放
+            particles.scale.setScalar(handScale);
+
+            for(let i = 0; i < PARTICLE_COUNT; i++) {
+                const px = i * 3;
+                const py = i * 3 + 1;
+                const pz = i * 3 + 2;
+
+                const tx = targetPositions[px];
+                const ty = targetPositions[py];
+                const tz = targetPositions[pz];
+
+                // 基础形状插值速度
+                const lerpSpeed = 0.03 + Math.random() * 0.02;
+
+                // 计算当前点到目标点的向量
+                let dx = tx - positionsArray[px];
+                let dy = ty - positionsArray[py];
+                let dz = tz - positionsArray[pz];
+
+                // 如果有扩散 (handSpread)，给目标位置增加噪点偏移
+                // 手掌越张开/或者捏合距离越大，spread影响
+                // 这里逻辑：捏合=紧凑，张开=扩散(炸开效果)
+                // 我们使用 handSpread 变量来添加一点随机偏移
+                
+                // 实时位置更新 = 当前 + (目标 - 当前) * 速度
+                positionsArray[px] += dx * lerpSpeed;
+                positionsArray[py] += dy * lerpSpeed;
+                positionsArray[pz] += dz * lerpSpeed;
+
+                // 添加微小的浮动动画，让粒子看起来是活的
+                positionsArray[px] += Math.sin(time * 2 + py) * 0.005;
+                positionsArray[py] += Math.cos(time * 1.5 + px) * 0.005;
+
+                // 手势扩散效果：如果检测到 spread 值大，强行推开粒子
+                if (isHandDetected && handSpread > 0.1) {
+                    // 简单的布朗运动扩散
+                    positionsArray[px] += (Math.random() - 0.5) * handSpread * 0.5;
+                    positionsArray[py] += (Math.random() - 0.5) * handSpread * 0.5;
+                    positionsArray[pz] += (Math.random() - 0.5) * handSpread * 0.5;
+                }
+            }
+
+            geometry.attributes.position.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+    </script>
+</body>
+</html>
